@@ -29,6 +29,7 @@ from .optimizer import OptimizerConfig
 __all__ = [
     "FSDPEngineConfig",
     "McoreEngineConfig",
+    "PrimusEngineConfig",
     "TrainingWorkerConfig",
     "TorchtitanEngineConfig",
     "VeOmniEngineConfig",
@@ -214,7 +215,7 @@ class McoreEngineConfig(EngineConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         """config validation logics go here"""
-        assert self.strategy == "megatron"
+        assert self.strategy in ("megatron", "primus")
         assert self.dtype in ["bfloat16", "float16"], f"dtype {self.dtype} not supported"
         if self.dynamic_context_parallel and (
             not isinstance(self.max_seqlen_per_dp_cp_rank, int)
@@ -227,6 +228,28 @@ class McoreEngineConfig(EngineConfig):
         if self.tensor_model_parallel_size == 1:
             warnings.warn("set sequence parallel to false as TP size is 1", stacklevel=2)
             self.sequence_parallel = False
+
+
+@dataclass
+class PrimusEngineConfig(McoreEngineConfig):
+    """Megatron-compatible engine configured by a resolved Primus experiment YAML."""
+
+    strategy: str = "primus"
+    primus_config_path: str = ""
+    primus_module: str = "pre_trainer"
+    primus_path: Optional[str] = None
+    primus_turbo_path: Optional[str] = None
+    primus_overrides: list[str] = field(default_factory=list)
+    primus_patches: str = "kernels"
+    primus_strict_config: bool = True
+    _primus_params: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.strategy != "primus":
+            raise ValueError(f"PrimusEngineConfig requires strategy='primus', got {self.strategy!r}")
+        if not self.primus_config_path:
+            raise ValueError("primus_config_path is required for strategy='primus'")
 
 
 @dataclass

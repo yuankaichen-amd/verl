@@ -153,7 +153,7 @@ def compute_topk_loss(
                 "forward_kl_topk": fsdp_losses.compute_forward_kl_topk,
                 "forward_kl_topk_tail": partial(fsdp_losses.compute_forward_kl_topk, include_tail=True),
             }
-        case "megatron":
+        case "megatron" | "primus":
             import verl.trainer.distillation.megatron.losses as megatron_losses
 
             loss_functions = {
@@ -163,7 +163,7 @@ def compute_topk_loss(
         case _:
             raise NotImplementedError(f"Unsupported strategy: {config.strategy=}")
     backend_kwargs = {}
-    if config.strategy == "megatron":
+    if config.strategy in ("megatron", "primus"):
         backend_kwargs = {"quant_align_size": quant_align_size, "cp_layout": cp_layout, "local_cp_size": local_cp_size}
 
     if loss_mode not in loss_functions:

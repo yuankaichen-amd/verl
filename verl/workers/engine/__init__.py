@@ -69,3 +69,13 @@ except ImportError as e:
     warnings.warn(f"megatron engine is not available: {e!r}", stacklevel=1)
     MegatronEngine = None
     MegatronEngineWithLMHead = None
+
+try:
+    from .primus import PrimusEngine, PrimusEngineWithLMHead, PrimusEngineWithValueHead
+
+    __all__ += ["PrimusEngine", "PrimusEngineWithLMHead", "PrimusEngineWithValueHead"]
+except ImportError as e:
+    warnings.warn(f"primus engine is not available: {e!r}", stacklevel=1)
+    PrimusEngine = None
+    PrimusEngineWithLMHead = None
+    PrimusEngineWithValueHead = None

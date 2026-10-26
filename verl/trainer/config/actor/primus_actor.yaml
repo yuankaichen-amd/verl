@@ -1,0 +1,15 @@
+defaults:
+  - ../optim@optim: megatron
+  - ../engine@primus: primus
+  - actor
+  - _self_
+
+_target_: verl.workers.config.PrimusActorConfig
+strategy: primus
+
+entropy_from_logits_with_chunking: false
+entropy_from_logits_chunk_size: 2048
+
+primus:
+  entropy_from_logits_with_chunking: ${oc.select:actor_rollout_ref.actor.entropy_from_logits_with_chunking,false}
+  entropy_from_logits_chunk_size: ${oc.select:actor_rollout_ref.actor.entropy_from_logits_chunk_size,2048}

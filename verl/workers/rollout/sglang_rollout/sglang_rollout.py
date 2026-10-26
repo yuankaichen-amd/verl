@@ -362,6 +362,9 @@ class ServerAdapter(BaseRollout):
                 # send http request
                 await self._engine.load_lora_adapter_from_tensor(req)
         else:
+            session_open = False
+            if self._engine is not None and self._is_server_tp_leader():
+                session_open = await self._engine.begin_weight_update()
             update_weights_bucket_bytes = int(self.config.checkpoint_engine.update_weights_bucket_megabytes) << 20
             fusion_groups = (
                 DEEPSEEK_V4_FUSION_GROUPS
@@ -389,6 +392,8 @@ class ServerAdapter(BaseRollout):
                     device_mesh=self.device_mesh,
                     load_format=LOADER_FQN,
                 )
+            if session_open and self._engine is not None and self._is_server_tp_leader():
+                await self._engine.end_weight_update()
 
         if self._engine is not None and self._is_server_tp_leader():
             await self._engine.flush_cache()

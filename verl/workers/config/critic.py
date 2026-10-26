@@ -24,6 +24,7 @@ from verl.utils.profiler import ProfilerConfig
 from .engine import (
     FSDPEngineConfig,
     McoreEngineConfig,
+    PrimusEngineConfig,
     TorchtitanEngineConfig,
     VeOmniEngineConfig,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "CriticConfig",
     "FSDPCriticConfig",
     "McoreCriticConfig",
+    "PrimusCriticConfig",
     "TorchTitanCriticConfig",
     "FSDPCriticModelCfg",
     "VeOmniCriticConfig",
@@ -179,6 +181,20 @@ class McoreCriticConfig(CriticConfig):
         """Validate Megatron critic configuration parameters."""
         super().__post_init__()
         self.engine = self.megatron
+
+
+@dataclass
+class PrimusCriticConfig(CriticConfig):
+    """Critic using the standalone Primus engine."""
+
+    strategy: str = "primus"
+    nccl_timeout: int = 600
+    primus: PrimusEngineConfig = field(default_factory=PrimusEngineConfig)
+    checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.engine = self.primus
 
 
 @dataclass

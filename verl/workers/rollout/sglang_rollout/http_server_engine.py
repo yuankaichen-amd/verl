@@ -755,6 +755,26 @@ class AsyncHttpServerAdapter(HttpServerAdapter):
         """
         return await self._make_async_request("resume_memory_occupation", {"tags": tags})
 
+    async def begin_weight_update(self) -> bool:
+        """Open a weight-update session when this SGLang build requires one.
+
+        Newer SGLang rejects ``update_weights_from_tensor`` unless
+        ``begin_weight_update`` has been called. Older servers return 404.
+        """
+        import requests
+
+        try:
+            await self._make_async_request("begin_weight_update", {})
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status == 404:
+                return False
+            raise
+        return True
+
+    async def end_weight_update(self) -> None:
+        await self._make_async_request("end_weight_update", {})
+
     async def update_weights_from_tensor(
         self,
         req: UpdateWeightsFromTensorReqInput,
