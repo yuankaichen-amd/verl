@@ -56,7 +56,7 @@ def _uses_megatron(config) -> bool:
     from omegaconf import OmegaConf
 
     for key in ("actor_rollout_ref.actor.strategy", "critic.strategy"):
-        if OmegaConf.select(config, key, default=None) == "megatron":
+        if OmegaConf.select(config, key, default=None) in ("megatron", "primus"):
             return True
     return False
 

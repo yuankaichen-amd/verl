@@ -135,20 +135,17 @@ def validate_config(
     n_gpus = config.trainer.n_gpus_per_node * config.trainer.nnodes
 
     if not config.actor_rollout_ref.actor.use_dynamic_bsz:
-        if config.actor_rollout_ref.actor.strategy == "megatron":
+        strategy = config.actor_rollout_ref.actor.strategy
+        if strategy in ("megatron", "primus"):
+            engine = config.actor_rollout_ref.actor[strategy]
             model_parallel_size = (
-                config.actor_rollout_ref.actor.megatron.tensor_model_parallel_size
-                * config.actor_rollout_ref.actor.megatron.pipeline_model_parallel_size
+                engine.tensor_model_parallel_size * engine.pipeline_model_parallel_size
             )
-            assert (
-                n_gpus % (model_parallel_size * config.actor_rollout_ref.actor.megatron.context_parallel_size) == 0
-            ), (
+            assert n_gpus % (model_parallel_size * engine.context_parallel_size) == 0, (
                 f"n_gpus ({n_gpus}) must be divisible by model_parallel_size ({model_parallel_size}) times "
-                f"context_parallel_size ({config.actor_rollout_ref.actor.megatron.context_parallel_size})"
+                f"context_parallel_size ({engine.context_parallel_size})"
             )
-            megatron_dp = n_gpus // (
-                model_parallel_size * config.actor_rollout_ref.actor.megatron.context_parallel_size
-            )
+            megatron_dp = n_gpus // (model_parallel_size * engine.context_parallel_size)
             minimal_bsz = megatron_dp * config.actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu
         else:
             minimal_bsz = n_gpus

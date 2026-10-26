@@ -1,0 +1,15 @@
+defaults:
+  - megatron
+  - _self_
+
+_target_: verl.workers.config.PrimusEngineConfig
+strategy: primus
+
+# Primus is the source of truth for model, parallelism, recompute and kernel settings.
+primus_config_path: ???
+primus_module: pre_trainer
+primus_path: ${oc.env:PRIMUS_PATH,null}
+primus_turbo_path: ${oc.env:PRIMUS_TURBO_PATH,null}
+primus_overrides: []
+primus_patches: kernels
+primus_strict_config: true

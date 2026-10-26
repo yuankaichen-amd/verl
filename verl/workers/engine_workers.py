@@ -72,9 +72,9 @@ def _plan_liger_flsce_capacity(config: DictConfig, role: str) -> Optional[tuple[
         if consumer not in role:
             continue
         settings = config[consumer]
-        if settings.strategy != "megatron":
+        if settings.strategy not in ("megatron", "primus"):
             continue
-        engine = settings.megatron
+        engine = settings[settings.strategy]
         if engine.get("dtype", "bfloat16") != "bfloat16":
             continue
         limits = (
@@ -532,8 +532,8 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         # engine. Both expose `router_replay` on their per-strategy engine
         # config (the field lives on the shared `EngineConfig` base).
         actor_strategy = self.config.actor.strategy
-        if actor_strategy == "megatron":
-            rr_mode = self.config.actor.megatron.router_replay.mode
+        if actor_strategy in ("megatron", "primus"):
+            rr_mode = self.config.actor[actor_strategy].router_replay.mode
         elif actor_strategy == "veomni":
             rr_mode = self.config.actor.veomni.router_replay.mode
         else:
@@ -688,6 +688,8 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
             self.actor.reset()
             self.actor.set_loss_fn(self.loss_fn)
             self.set_dispatch_collect(mesh_name="actor", **self.actor.get_dispatch_collect())
+            if self.actor.engine.is_param_offload_enabled or self.actor.engine.is_optimizer_offload_enabled:
+                aggressive_empty_cache(force_sync=True)
 
         # 3. build rollout engine
         if "rollout" in self.role:

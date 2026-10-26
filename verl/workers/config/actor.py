@@ -25,6 +25,7 @@ from verl.utils.qat import QATConfig
 from .engine import (
     FSDPEngineConfig,
     McoreEngineConfig,
+    PrimusEngineConfig,
     TorchtitanEngineConfig,
     VeOmniEngineConfig,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "ActorConfig",
     "FSDPActorConfig",
     "McoreActorConfig",
+    "PrimusActorConfig",
     "VeOmniActorConfig",
     "QATConfig",
     "TorchTitanActorConfig",
@@ -280,6 +282,23 @@ class McoreActorConfig(ActorConfig):
         """Validate FSDP actor configuration parameters."""
         super().__post_init__()
         self.engine = self.megatron
+
+
+@dataclass
+class PrimusActorConfig(ActorConfig):
+    """Actor using the standalone Primus engine."""
+
+    strategy: str = "primus"
+    entropy_from_logits_with_chunking: bool = False
+    entropy_from_logits_chunk_size: int = 2048
+    primus: PrimusEngineConfig = field(default_factory=PrimusEngineConfig)
+    profile: dict[str, Any] = field(default_factory=dict)
+    use_rollout_log_probs: bool = False
+    checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.engine = self.primus
 
 
 @dataclass

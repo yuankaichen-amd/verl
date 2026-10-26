@@ -97,7 +97,7 @@ class DetachActorWorker(ActorRolloutRefWorker):
             )
 
             self._strategy_handlers = (fsdp2_sharded_save_to_cpu, fsdp2_sharded_load_from_cpu)
-        elif strategy == "megatron":
+        elif strategy in ("megatron", "primus"):
             from verl.utils.megatron_utils import (
                 copy_megatron_model_to_cpu,
                 restore_megatron_model_from_cpu,

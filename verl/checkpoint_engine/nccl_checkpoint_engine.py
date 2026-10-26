@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -19,8 +21,13 @@ from dataclasses import dataclass
 from typing import AsyncGenerator, Generator
 from unittest.mock import patch
 
-with patch("importlib.metadata.distributions", return_value=[]):
-    import cupy as cp
+try:
+    with patch("importlib.metadata.distributions", return_value=[]):
+        import cupy as cp
+except ModuleNotFoundError:
+    # ROCm images often have no CuPy wheel. Torch uint8 buckets work when
+    # expandable_segments is off; CuPy only exists to dodge that allocator.
+    cp = None
 
 import ray
 import ray.util.collective as collective
@@ -165,7 +172,7 @@ class NCCLCheckpointEngine(CheckpointEngine):
     def prepare(self) -> WorkerMetadata:
         # For master process, use cupy instead of torch to avoid memory register error
         # when `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
-        if self.is_master:
+        if self.is_master and cp is not None:
             self.send_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
             self.recv_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
         else:
@@ -375,7 +382,10 @@ class NCCLCheckpointEngine(CheckpointEngine):
 
             tensor_meta.offset = offset
             bucket_meta[tensor_meta.name] = tensor_meta
-            send_buf[offset : offset + tensor_meta.chunk_size] = cp.asarray(chunk)
+            if cp is not None and isinstance(send_buf, cp.ndarray):
+                send_buf[offset : offset + tensor_meta.chunk_size] = cp.asarray(chunk)
+            else:
+                send_buf[offset : offset + tensor_meta.chunk_size] = chunk
             offset += tensor_meta.chunk_size
 
             # keep the relays in step: no-op once the bucket's broadcast has already been drained
