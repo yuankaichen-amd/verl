@@ -68,6 +68,29 @@ class WorkerMetadata:
     master: MasterMetadata | None = None
 
 
+def _bucket_device(bucket) -> int:
+    device = bucket.device
+    return int(device.id) if hasattr(device, "id") else int(device.index or 0)
+
+
+def _select_device(index: int) -> None:
+    if torch.cuda.is_available():
+        torch.cuda.set_device(index)
+
+
+def _checkpoint_device_index() -> int:
+    """GPU this worker sends or receives weights on.
+
+    A rollout worker sees one GPU, so it is device 0. A process that owns a whole
+    node (the MaxText trainer) sees them all, and the weights must leave through
+    the device the rollout side's rank-0 peers use. The HIP current device is
+    per thread, so every entry point selects this one explicitly.
+    """
+    if not torch.cuda.is_available() or torch.cuda.device_count() <= 1:
+        return 0
+    return int(os.environ.get("VERL_CHECKPOINT_DEVICE", "0"))
+
+
 class BroadcastOperation:
     """Async broadcast operation with NCCL in separate thread.
 
@@ -100,6 +123,9 @@ class BroadcastOperation:
         self._task = loop.run_in_executor(None, self._run)
 
     def _run(self):
+        # The executor thread has its own current device. NCCL keys the
+        # communicator on the bucket's device, so make the thread agree with it.
+        _select_device(_bucket_device(self.bucket))
         # broadcast tensor meta via zeromq PUB/SUB
         if self.rank == 0:
             self.socket.send_string(self.topic, flags=zmq.SNDMORE)
@@ -153,6 +179,7 @@ class NCCLCheckpointEngine(CheckpointEngine):
         self.rebuild_group = rebuild_group
         self.rollout_dtype = rollout_dtype
         self.multi_sender = multi_sender
+        self.device_index = _checkpoint_device_index()
 
         # start zeromq server for broadcasting bucket tensor metadata
         self.is_master = is_master
@@ -170,14 +197,17 @@ class NCCLCheckpointEngine(CheckpointEngine):
         return ray.get_runtime_context().get_node_id()
 
     def prepare(self) -> WorkerMetadata:
+        _select_device(self.device_index)
         # For master process, use cupy instead of torch to avoid memory register error
         # when `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
         if self.is_master and cp is not None:
-            self.send_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
-            self.recv_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
+            with cp.cuda.Device(self.device_index):
+                self.send_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
+                self.recv_buf = cp.zeros(self.bucket_size, dtype=cp.uint8)
         else:
-            self.send_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device="cuda")
-            self.recv_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device="cuda")
+            device = f"cuda:{self.device_index}"
+            self.send_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device=device)
+            self.recv_buf = torch.zeros(self.bucket_size, dtype=torch.uint8, device=device)
 
         master = (
             MasterMetadata(zmq_ip=self.ip, zmq_port=self.listen_port, multi_sender=self.multi_sender)
@@ -283,6 +313,29 @@ class NCCLCheckpointEngine(CheckpointEngine):
         self.socket.connect(address)
         self.socket.setsockopt_string(zmq.SUBSCRIBE, self.topic)
 
+    def _pin_barrier_device(self) -> None:
+        """Make the barrier run on this worker's current GPU only.
+
+        Ray's barrier spans every visible GPU unless the group already has a used
+        device. A process that owns a whole node (the MaxText trainer) would then
+        look for a rendezvous key such as "0,1,...,7" while single-GPU rollout
+        workers look for "0", and the two sides never meet. Weights travel on one
+        device, so the barrier should too.
+        """
+        try:
+            group = collective.get_group_handle(self.group_name)
+        except Exception as exc:
+            print(f"[nccl-ce] rank {self.rank}: no group handle ({exc!r})", flush=True)
+            return
+        used = getattr(group, "_used_gpu_indices", None)
+        if used is not None and not used:
+            used.add(self.device_index)
+        print(
+            f"[nccl-ce] rank {self.rank} world {self.world_size}: visible GPUs {torch.cuda.device_count()}, "
+            f"checkpoint device {self.device_index}, barrier devices {sorted(used) if used is not None else None}",
+            flush=True,
+        )
+
     def init_process_group(self, rank: int, world_size: int, master_metadata: MasterMetadata, num_senders: int):
         """Initialize the NCCL process group.
 
@@ -294,6 +347,7 @@ class NCCLCheckpointEngine(CheckpointEngine):
                 send or relay weights; ranks at or above it consume them.
         """
         self.num_senders = num_senders
+        _select_device(self.device_index)
 
         # Actor workers left out of the group are given rank -1.
         if rank < 0:
@@ -314,6 +368,7 @@ class NCCLCheckpointEngine(CheckpointEngine):
         # Only consumers read the bucket metadata stream; relays never touch the payload.
         if self.rank >= num_senders:
             self._connect_zmq_client(master_metadata)
+        self._pin_barrier_device()
         collective.barrier(self.group_name)
 
         logger.info(f"init_process_group rank: {self.rank}, world_size: {self.world_size}")
@@ -330,6 +385,7 @@ class NCCLCheckpointEngine(CheckpointEngine):
             weights: A generator that yields the name of the weight tensor and the tensor itself.
         """
         assert self.rank < self.num_senders, "Rollout workers should not send weights."
+        _select_device(self.device_index)
 
         # Actor workers left out of the group still have to walk the generator: producing each
         # weight is itself collective over the actor group.
@@ -463,6 +519,7 @@ class NCCLCheckpointEngine(CheckpointEngine):
             A tuple of the name of the weight tensor and the chunk itself.
         """
         assert self.rank > 0, "Rank 0 should not receive weights."
+        _select_device(self.device_index)
         send_buf, recv_buf = self.send_buf, self.recv_buf
         total_bytes, total_params = 0, 0
 

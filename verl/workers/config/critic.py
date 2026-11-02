@@ -24,6 +24,7 @@ from verl.utils.profiler import ProfilerConfig
 from .engine import (
     FSDPEngineConfig,
     McoreEngineConfig,
+    MaxTextEngineConfig,
     PrimusEngineConfig,
     TorchtitanEngineConfig,
     VeOmniEngineConfig,
@@ -35,6 +36,7 @@ __all__ = [
     "CriticConfig",
     "FSDPCriticConfig",
     "McoreCriticConfig",
+    "MaxTextCriticConfig",
     "PrimusCriticConfig",
     "TorchTitanCriticConfig",
     "FSDPCriticModelCfg",
@@ -195,6 +197,19 @@ class PrimusCriticConfig(CriticConfig):
     def __post_init__(self):
         super().__post_init__()
         self.engine = self.primus
+
+
+@dataclass
+class MaxTextCriticConfig(CriticConfig):
+    """Present so ``model_engine=maxtext`` composes. A value head is not implemented."""
+
+    strategy: str = "maxtext"
+    maxtext: MaxTextEngineConfig = field(default_factory=MaxTextEngineConfig)
+    checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.engine = self.maxtext
 
 
 @dataclass

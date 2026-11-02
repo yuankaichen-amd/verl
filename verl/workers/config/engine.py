@@ -29,6 +29,7 @@ from .optimizer import OptimizerConfig
 __all__ = [
     "FSDPEngineConfig",
     "McoreEngineConfig",
+    "MaxTextEngineConfig",
     "PrimusEngineConfig",
     "TrainingWorkerConfig",
     "TorchtitanEngineConfig",
@@ -250,6 +251,41 @@ class PrimusEngineConfig(McoreEngineConfig):
             raise ValueError(f"PrimusEngineConfig requires strategy='primus', got {self.strategy!r}")
         if not self.primus_config_path:
             raise ValueError("primus_config_path is required for strategy='primus'")
+
+
+@dataclass
+class MaxTextEngineConfig(EngineConfig):
+    """JAX MaxText engine. Primus YAML is the trainer configuration.
+
+    One process owns every GPU on the node. Parallelism lives in the MaxText
+    mesh (``ici_fsdp_parallelism``, ``ici_expert_parallelism``), not in
+    Megatron TP/PP/CP fields.
+    """
+
+    strategy: str = "maxtext"
+    primus_config_path: str = ""
+    primus_module: str = "pre_trainer"
+    primus_path: Optional[str] = None
+    maxtext_path: Optional[str] = None
+    primus_overrides: list[str] = field(default_factory=list)
+    # Scanned Qwen3-30B-A3B layout used when exporting live parameters.
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 4
+    head_dim: int = 128
+    # Hugging Face checkpoint to start from. When unset, the model path is used.
+    hf_weights_path: Optional[str] = None
+    load_hf_weights: bool = True
+    # Leave room for the torch tensors the rollout sync materializes.
+    mem_fraction: float = 0.85
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.strategy != "maxtext":
+            raise ValueError(f"MaxTextEngineConfig requires strategy='maxtext', got {self.strategy!r}")
+        if not self.primus_config_path:
+            raise ValueError("primus_config_path is required for strategy='maxtext'")
+        if not 0 < self.mem_fraction < 1:
+            raise ValueError(f"mem_fraction must be in (0, 1), got {self.mem_fraction}")
 
 
 @dataclass

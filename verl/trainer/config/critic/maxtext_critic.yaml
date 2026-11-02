@@ -1,0 +1,13 @@
+defaults:
+  - ../optim@optim: megatron
+  - ../engine@maxtext: maxtext
+  - critic
+  - _self_
+
+_target_: verl.workers.config.MaxTextCriticConfig
+strategy: maxtext
+
+maxtext:
+  primus_config_path: ${actor_rollout_ref.actor.maxtext.primus_config_path}
+  primus_path: ${actor_rollout_ref.actor.maxtext.primus_path}
+  maxtext_path: ${actor_rollout_ref.actor.maxtext.maxtext_path}

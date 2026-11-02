@@ -25,6 +25,7 @@ from verl.utils.qat import QATConfig
 from .engine import (
     FSDPEngineConfig,
     McoreEngineConfig,
+    MaxTextEngineConfig,
     PrimusEngineConfig,
     TorchtitanEngineConfig,
     VeOmniEngineConfig,
@@ -38,6 +39,7 @@ __all__ = [
     "ActorConfig",
     "FSDPActorConfig",
     "McoreActorConfig",
+    "MaxTextActorConfig",
     "PrimusActorConfig",
     "VeOmniActorConfig",
     "QATConfig",
@@ -299,6 +301,21 @@ class PrimusActorConfig(ActorConfig):
     def __post_init__(self):
         super().__post_init__()
         self.engine = self.primus
+
+
+@dataclass
+class MaxTextActorConfig(ActorConfig):
+    """Actor using the JAX MaxText engine."""
+
+    strategy: str = "maxtext"
+    maxtext: MaxTextEngineConfig = field(default_factory=MaxTextEngineConfig)
+    profile: dict[str, Any] = field(default_factory=dict)
+    use_rollout_log_probs: bool = False
+    checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.engine = self.maxtext
 
 
 @dataclass

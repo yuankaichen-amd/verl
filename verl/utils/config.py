@@ -136,7 +136,16 @@ def validate_config(
 
     if not config.actor_rollout_ref.actor.use_dynamic_bsz:
         strategy = config.actor_rollout_ref.actor.strategy
-        if strategy in ("megatron", "primus"):
+        if strategy == "maxtext":
+            # One JAX process consumes the global batch and shards it itself.
+            minimal_bsz = 1
+            sync_step = config.get("trainer", {}).get("v1", {}).get("separate_async", {}).get("parameter_sync_step", 1)
+            if sync_step not in (None, 1):
+                raise ValueError(
+                    f"strategy=maxtext supports trainer.v1.separate_async.parameter_sync_step=1, got {sync_step}: "
+                    "it cannot keep the previous policy for decoupled PPO"
+                )
+        elif strategy in ("megatron", "primus"):
             engine = config.actor_rollout_ref.actor[strategy]
             model_parallel_size = (
                 engine.tensor_model_parallel_size * engine.pipeline_model_parallel_size

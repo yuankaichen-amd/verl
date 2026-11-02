@@ -1,0 +1,15 @@
+defaults:
+  - ref
+  - ../engine@maxtext: maxtext
+  - _self_
+
+_target_: verl.workers.config.MaxTextActorConfig
+strategy: maxtext
+
+maxtext:
+  primus_config_path: ${actor_rollout_ref.actor.maxtext.primus_config_path}
+  primus_module: ${actor_rollout_ref.actor.maxtext.primus_module}
+  primus_path: ${actor_rollout_ref.actor.maxtext.primus_path}
+  maxtext_path: ${actor_rollout_ref.actor.maxtext.maxtext_path}
+  primus_overrides: ${actor_rollout_ref.actor.maxtext.primus_overrides}
+  forward_only: true
